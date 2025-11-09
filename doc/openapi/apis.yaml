@@ -1,0 +1,36 @@
+openapi: 3.1.0
+info:
+  title: Gringotts Bank Backend API
+  description: API mínima; incluye healthcheck del servicio.
+  version: 1.0.0
+servers:
+  - url: https://{host}
+    variables:
+      host:
+        default: api.example.com
+paths:
+  /health:
+    get:
+      summary: Healthcheck
+      description: Devuelve OK si el servicio está operativo.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                default:
+                  value:
+                    message: OK
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: OK
+      required:
+        - message

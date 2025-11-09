@@ -1,0 +1,9 @@
+bin/
+dist/
+*.zip
+*.exe
+bootstrap
+.terraform/
+.terragrunt-cache/
+terraform.tfstate*
+.idea/
