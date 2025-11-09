@@ -2,28 +2,20 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
-	"gringotts-bank-backend/lambda/GetHealthcheckAPI/config"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
-// mockProcessor implements the processor interface used by Handler.
-type mockProcessor struct{}
-
-func (m mockProcessor) GetHealth() ([]byte, error) { return []byte(`{"message":"OK"}`), nil }
-
-// failingProcessor simulates an internal error.
-type failingProcessor struct{}
-
-func (f failingProcessor) GetHealth() ([]byte, error) { return nil, errors.New("boom") }
+/*
+* Test Cases (Handler)
+* 1 - ServeHTTP_OK: Returns 200 and JSON {"message":"OK"} on GET.
+* 2 - ServeHTTP_MethodNotAllowed: Returns 405 for non-GET method.
+* 3 - ServeHTTP_InternalError: Returns 500 and error JSON when processor fails.
+ */
 
 func TestServeHTTP_OK(t *testing.T) {
-	t.Setenv("ENV", "test")
-	t.Setenv("LOG_LEVEL", "info")
-	cfg := config.New()
-	h := NewHandler(&cfg, mockProcessor{})
+	h := setup(t, mockProcessor{})
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
@@ -44,10 +36,7 @@ func TestServeHTTP_OK(t *testing.T) {
 }
 
 func TestServeHTTP_MethodNotAllowed(t *testing.T) {
-	t.Setenv("ENV", "test")
-	t.Setenv("LOG_LEVEL", "debug")
-	cfg := config.New()
-	h := NewHandler(&cfg, mockProcessor{})
+	h := setup(t, mockProcessor{})
 
 	req := httptest.NewRequest(http.MethodPost, "/health", nil)
 	rec := httptest.NewRecorder()
@@ -61,10 +50,7 @@ func TestServeHTTP_MethodNotAllowed(t *testing.T) {
 }
 
 func TestServeHTTP_InternalError(t *testing.T) {
-	t.Setenv("ENV", "test")
-	t.Setenv("LOG_LEVEL", "debug")
-	cfg := config.New()
-	h := NewHandler(&cfg, failingProcessor{})
+	h := setup(t, failingProcessor{})
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()

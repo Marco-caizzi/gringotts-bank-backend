@@ -24,28 +24,25 @@ func NewHandler(cfg *config.Configuration, proc processor.HealthProcessor) http.
 }
 
 const (
-	contentTypeJSON          = "application/json"
-	bodyMethodNotAllowedJSON = `{"message":"method not allowed"}`
-	bodyInternalErrorJSON    = `{"message":"internal error"}`
+	bodyMethodNotAllowedMsg = "method not allowed"
+	bodyInternalErrorMsg    = "internal error"
 )
 
 // ServeHTTP returns the health payload as JSON and only allows GET.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Content-Type", contentTypeJSON)
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		_, _ = w.Write([]byte(bodyMethodNotAllowedJSON))
+		writeResponse(w, http.StatusMethodNotAllowed, Response{Message: bodyMethodNotAllowedMsg})
 		return
 	}
 
 	results, err := h.proc.GetHealth()
 	if err != nil {
-		w.Header().Set("Content-Type", contentTypeJSON)
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(bodyInternalErrorJSON))
+		writeResponse(w, http.StatusInternalServerError, Response{Message: bodyInternalErrorMsg})
 		return
 	}
-	w.Header().Set("Content-Type", contentTypeJSON)
+
+	// Return the JSON payload provided by the processor as-is.
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(results)
 }
