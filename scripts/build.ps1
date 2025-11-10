@@ -23,4 +23,9 @@ if (Test-Path -Path dist/health.zip) {
 
 Compress-Archive -Path bootstrap -DestinationPath dist/health.zip -Force
 
+# Clean local bootstrap binary (kept in dist/health.zip)
+if (Test-Path -Path ./bootstrap) {
+  Remove-Item ./bootstrap -Force
+}
+
 Write-Host "Package created at dist/health.zip"

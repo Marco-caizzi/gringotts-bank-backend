@@ -1,95 +1,67 @@
 # Gringotts Bank Backend – Serverless Foundations
 
-This repository provides the backend serverless foundation intended to satisfy the needs expressed in the companion project “Gringotts Bank” (see https://github.com/PabloPonte/gringotts-bank). It establishes a repeatable pattern and shared infrastructure to run multiple AWS Lambdas behind API Gateway, with a local development workflow powered by LocalStack and Terraform.
+Este repositorio establece la base serverless e infraestructura para soportar múltiples lambdas de forma consistente y reproducible, alineado con las necesidades del proyecto “Gringotts Bank” (https://github.com/PabloPonte/gringotts-bank). Se prioriza un flujo local robusto con LocalStack + Terraform y un patrón de capas simple en Go.
 
-- Runtime (pattern): Go 1.22 custom runtime (binary named `bootstrap` per Lambda)
-- Local infrastructure applied: Terraform targeting LocalStack (API Gateway REST v1, Lambda, IAM, CloudWatch Logs, S3, DynamoDB services enabled in docker-compose)
-- Common configuration across lambdas: `ENV`, `LOG_LEVEL`
+- Runtime base: Go 1.25 con custom runtime (binario `bootstrap` por lambda)
+- Infraestructura local aplicada: Terraform apuntando a LocalStack (API Gateway REST v1, Lambda, IAM, CloudWatch Logs, S3, DynamoDB habilitados en docker-compose)
+- Configuración común por lambda: `ENV`, `LOG_LEVEL`
 
-## Architecture & layering pattern
-Each lambda should follow the same small layered separation for clarity and testability:
-- `cmd/` – composition root (main.go) wiring config + processor + handler and adapting it to Lambda runtime.
-- `config/` – reads and validates the lambda-specific required env vars. Shared conventions: `ENV`, `LOG_LEVEL`.
-- `processor/` – business logic (pure domain / application layer). Expose a small interface consumed by handler.
-- `handler/` – HTTP adapter implementing `http.Handler` (`ServeHTTP`) and isolating protocol concerns from business logic.
+## Patrón de arquitectura y capas
+Cada lambda sigue una separación mínima para claridad y testabilidad:
+- `cmd/` – composition root: instancia configuración + processor + handler y adapta a runtime Lambda.
+- `config/` – lectura/validación de variables de entorno (convenciones: `ENV`, `LOG_LEVEL`).
+- `processor/` – lógica de negocio (interfaces del dominio). La capa superior depende de una interfaz, no de la implementación.
+- `handler/` – adaptador HTTP implementando `http.Handler` (`ServeHTTP`), sin mezclar verbos cuando la semántica difiere.
 
-This pattern keeps methods isolated: prefer 1 HTTP method per lambda (separate lambdas per verb when semantics differ), avoiding mixed verb routing inside one handler. API Gateway (REST v1) integrates as `AWS_PROXY` with each Lambda. REST v1 is used locally to maximize compatibility with the open-source LocalStack image.
+API Gateway (REST v1) integra por `AWS_PROXY` con cada lambda, y se prefiere separar endpoints/verbos en lambdas distintas.
 
-## Requirements
-- Docker Desktop (or compatible)
-- Go 1.22+
-- Terraform 1.5+
-- LocalStack image (pulled automatically by Docker Compose)
-- Windows PowerShell (or cmd) / Bash (Git Bash/WSL/Linux/macOS)
+## Requisitos
+- Docker Desktop (última versión estable)
+- Go 1.25.x
+- Terraform 1.6.x (>= 1.5 funciona; en CI se usa 1.6.6)
+- LocalStack (se levanta vía `docker-compose.yml`)
+- PowerShell (Windows) o Bash (Linux/macOS/WSL)
+- Opcional para scripts Bash: `zip` y `curl` en el PATH
+- Opcional para aplicar en AWS manualmente: Terragrunt
 
-## Quickstart (Bash one-shot)
-If you have Bash available (Git Bash/WSL/Linux/macOS):
-
+## Quickstart local (Bash)
 ```bash
 ./scripts/local-e2e.sh up
 ```
-This will:
-- Start LocalStack via docker compose
-- Build the serverless artifacts defined by the scripts
-- Apply Terraform to LocalStack (API Gateway REST v1 + Lambda, IAM, Logs)
-
-Stop containers:
+Detener:
 ```bash
 ./scripts/local-e2e.sh down
 ```
 
-## Windows: bring everything up (infrastructure applied)
-Using PowerShell from repo root:
-
+## Quickstart Windows (PowerShell)
 ```powershell
-# Start LocalStack and supporting services
+# Levantar LocalStack y Postgres
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\localstack-up.ps1
 
-# Build artifacts and apply Terraform against LocalStack
+# Build + Terraform (LocalStack)
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tf-local-apply.ps1
+
+# Invocar endpoint expuesto por Terraform
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\localstack-invoke.ps1
 ```
-Notes:
-- Include the `.ps1` extension when running PowerShell scripts.
-- Terraform writes useful outputs (e.g., base API endpoint) under `dist/` when configured to do so.
 
-## Environment variables (shared convention)
-- `ENV` (required): execution environment (local, dev, prod, etc.).
-- `LOG_LEVEL` (optional): `debug|info|warn|error` default `info`. "warning" normalizes to `warn`.
-Additional lambda-specific variables can be added per lambda in its `config` package.
+## Terraform – LocalStack
+El stack bajo `infra/terraform/localstack` configura el provider AWS hacia `http://localhost:4566`, omite validaciones de cuenta y usa credenciales dummy. Recursos aplicados localmente:
+- Role y policies básicas de ejecución para Lambda
+- Log groups en CloudWatch
+- Lambdas `provided.al2023` con handler `bootstrap`
+- API Gateway REST v1 con integración `AWS_PROXY` y stage
 
-## Build and package (manual)
-Bash/Make (optional):
-```bash
-make clean && make package
-```
-PowerShell:
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build.ps1
-```
-These commands compile the `bootstrap` binary for linux/amd64 and produce a zip in `dist/` according to the scripts.
-
-## Terraform (LocalStack)
-Terraform code under `infra/terraform/localstack` configures the AWS provider to point at LocalStack’s edge endpoint (`http://localhost:4566`) and intentionally skips real AWS credentials (uses test values and disables account checks). The applied infrastructure includes:
-- IAM role and basic execution policy for Lambda
-- CloudWatch Log Group per lambda
-- Lambda function(s) with `provided.al2023` runtime and `bootstrap` handler
-- API Gateway REST (v1) with resources/methods and `AWS_PROXY` integration
-- Deployment and stage configuration
-
-Apply:
+Aplicar/Destruir:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tf-local-apply.ps1
-```
-Destroy:
-```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tf-local-destroy.ps1
 ```
 
-## OpenAPI documentation
-- Location: `doc/openapi/apis.yaml` (single source of truth for public HTTP contracts).
-- Conventions: document each resource and method; keep one method per lambda by design (separate lambdas per verb when needed).
-- Validation: keep the spec valid OpenAPI 3.x; PRs should update the spec alongside code changes.
-- Serve locally with Swagger UI:
+## OpenAPI
+- Ubicación: `doc/openapi/apis.yaml` como fuente única de contratos HTTP públicos.
+- Criterios: documentar recursos/métodos; mantener un método por lambda cuando aplica.
+- Visualización local (Swagger UI):
   - Bash/Linux/macOS:
     ```bash
     docker run --rm -p 8080:8080 \
@@ -97,51 +69,29 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tf-local-destroy.ps1
       -v "$(pwd)/doc/openapi:/spec" \
       swaggerapi/swagger-ui
     ```
-  - Windows PowerShell (ajusta la ruta si fuera necesario):
+  - Windows PowerShell:
     ```powershell
     docker run --rm -p 8080:8080 `
       -e SWAGGER_JSON=/spec/apis.yaml `
       -v ${PWD}/doc/openapi:/spec `
       swaggerapi/swagger-ui
     ```
-  - Then open http://localhost:8080 in your browser.
 
-Optionally, you can add an OpenAPI linter/validator in CI (e.g., Redocly or `openapi-cli`) if you want automated checks.
-
-## CI/CD (proposal)
-Goal: fast feedback (lint/test/build), reproducible packaging, infra validation against LocalStack, and artifact publication. A minimal GitHub Actions pipeline could:
-
-- Trigger: on PRs to main and on push to main.
+## CI/CD (propuesta)
+Pipeline mínimo en GitHub Actions para calidad, empaquetado y validación infra local:
+- Disparadores: PRs a main y pushes a main.
 - Jobs:
-  1) Go Lint & Tests:
-    - setup-go, cache modules, `go mod tidy -compat=<go.mod version>`, `go test -cover ./...`.
-    - upload coverage as artifact (optional).
-  2) Package lambdas:
-    - build linux/amd64 `bootstrap` per lambda and zip under `dist/`.
-    - upload zips como artifacts del workflow.
-  3) Terraform validate/plan (LocalStack):
-    - start LocalStack as service in Actions.
-    - run `terraform fmt -check`, `terraform init`, `terraform validate`, `terraform plan` in `infra/terraform/localstack`.
-    - optional smoke: derive endpoint de `terraform output` e invocar con `curl` (siempre contra LocalStack, no AWS real).
+  1) Lint + Tests Go
+     - setup-go + cache, `go mod tidy`, `go test -cover ./...`.
+  2) Empaquetado
+     - build linux/amd64 del binario `bootstrap` por lambda y zip en `dist/`.
+     - publicar zips como artifacts.
+  3) Terraform validate/plan (LocalStack)
+     - levantar LocalStack como servicio del workflow.
+     - `terraform fmt -check`, `terraform init`, `terraform validate`, `terraform plan` en `infra/terraform/localstack`.
+     - (opcional) smoke test: leer `terraform output` e invocar `/health` con `curl`.
 
-Notes:
-- El job `package` muestra un patrón para una lambda; para múltiples, iterar sobre `lambda/*/cmd` o crear scripts que empaqueten todas.
-- Para despliegue a AWS real, crear un workflow separado con credenciales seguras (OIDC o secretos), y usar `terraform plan/apply` contra AWS, no LocalStack.
+Para entornos AWS reales (dev/prod): usar Terragrunt en `infra/terragrunt/live/*`, inyectar VPC/Subnets/SG, y habilitar módulos como RDS desde un root `infra/terraform/app` (plan/apply con approvals). Credenciales vía OIDC o secretos cifrados, con protección de ramas.
 
-## Tests and coverage
-Run all tests with coverage:
-```powershell
-go test -cover ./...
-```
-Or Bash:
-```bash
-go test -cover ./...
-```
-Optional coverage detail:
-```bash
-go test -coverprofile=coverage.out ./...
-go tool cover -func=coverage.out
-```
-
-## Relation to the Gringotts Bank project
-This backend lays the groundwork and infrastructure to implement the capabilities described in https://github.com/PabloPonte/gringotts-bank. As business features evolve there, corresponding lambdas and API resources can be added here adhering to the same layering and infrastructure pattern.
+## Perspectiva de crecimiento
+Este repositorio está diseñado para escalar a múltiples lambdas y recursos de infraestructura, reutilizando el mismo patrón de capas y módulos Terraform. Las capacidades descritas en “Gringotts Bank” se implementarán aquí como endpoints y servicios, manteniendo consistencia entre ambientes locales y cloud.

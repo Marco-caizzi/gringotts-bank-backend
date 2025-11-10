@@ -31,10 +31,16 @@ go.work.sum
 # .idea/
 # .vscode/
 
+# Build artifacts
+/dist/
+**/*.zip
+
+# Lambda custom runtime binary (ignore per-lambda build output only)
+lambda/**/cmd/bootstrap
+
 bin/
 dist/
 *.zip
-bootstrap
 .terraform/
 .terragrunt-cache/
 terraform.tfstate*

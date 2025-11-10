@@ -23,8 +23,9 @@ inputs = {
   timeout            = 5
   package_path       = "${get_repo_root()}/dist/health.zip"
   environment = {
-    ENV          = "dev"
-    LOG_LEVEL    = "info"
+    ENV           = "prod"
+    LOG_LEVEL     = "info"
     DB_SECRET_ARN = try(dependency.app.outputs.rds_secret_arn, "")
   }
 }
+
